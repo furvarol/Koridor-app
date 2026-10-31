@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../main.dart';
+import '../pip.dart';
 import '../tracker.dart';
 
 /// Ana sürüş ekranı: büyük rakamlar, uyarı rengi, başlat/durdur ve koridor kaydı.
@@ -51,6 +52,16 @@ class _StatusBar extends StatelessWidget {
         if (acc != null)
           Text('GPS ±${acc.round()} m',
               style: Theme.of(context).textTheme.bodySmall),
+        IconButton(
+          tooltip: 'Küçük pencerede göster',
+          icon: const Icon(Icons.picture_in_picture_alt),
+          onPressed: () async {
+            if (!await Pip.enter() && context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Bu cihazda resim içinde resim açılamadı.')));
+            }
+          },
+        ),
       ],
     );
   }

@@ -3,7 +3,9 @@ import 'package:intl/date_symbol_data_local.dart';
 
 import 'screens/corridors_screen.dart';
 import 'screens/drive_screen.dart';
+import 'pip.dart';
 import 'screens/history_screen.dart';
+import 'screens/pip_view.dart';
 import 'tracker.dart';
 
 final tracker = Tracker();
@@ -12,6 +14,9 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('tr_TR');
   await tracker.init();
+  Pip.init();
+  // Takip açıkken uygulamadan çıkınca hız PiP penceresinde görünsün.
+  tracker.addListener(() => Pip.setAutoEnter(tracker.running));
   runApp(const KoridorApp());
 }
 
@@ -44,6 +49,13 @@ class _HomeState extends State<Home> {
 
   @override
   Widget build(BuildContext context) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: Pip.active,
+      builder: (context, inPip, _) => inPip ? const PipView() : _full(),
+    );
+  }
+
+  Widget _full() {
     final pages = const [DriveScreen(), CorridorsScreen(), HistoryScreen()];
     return Scaffold(
       body: SafeArea(child: pages[_tab]),
