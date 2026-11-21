@@ -19,6 +19,8 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          # Android iskeleti bu sürümle üretildi; yeni sürümler daha yeni AGP ister.
+          flutter-version: 3.47.9
           cache: true
 
       # Eksik Android iskelet dosyalarını üretir; repodaki dosyaların üzerine yazmaz.
