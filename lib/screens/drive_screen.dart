@@ -53,6 +53,12 @@ class _StatusBar extends StatelessWidget {
           Text('GPS ±${acc.round()} m',
               style: Theme.of(context).textTheme.bodySmall),
         IconButton(
+          tooltip: t.voiceOn ? 'Sesli uyarıları kapat' : 'Sesli uyarıları aç',
+          icon: Icon(t.voiceOn ? Icons.volume_up : Icons.volume_off,
+              color: t.voiceOn ? null : Colors.redAccent),
+          onPressed: () => t.setVoice(!t.voiceOn),
+        ),
+        IconButton(
           tooltip: 'Küçük pencerede göster',
           icon: const Icon(Icons.picture_in_picture_alt),
           onPressed: () async {
@@ -169,11 +175,28 @@ class _RecordingView extends StatelessWidget {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        const Icon(Icons.fiber_manual_record, color: Colors.redAccent, size: 48),
-        const SizedBox(height: 12),
-        Text('Koridor kaydediliyor', style: style.titleLarge),
-        const SizedBox(height: 8),
-        Text('${(t.recordingLengthM / 1000).toStringAsFixed(2)} km', style: style.displayMedium),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.fiber_manual_record, color: Colors.redAccent, size: 20),
+            const SizedBox(width: 8),
+            Text('Koridor kaydediliyor', style: style.titleMedium),
+          ],
+        ),
+        const Spacer(),
+        Text('ORTALAMA', style: style.labelMedium),
+        Text('${t.recordingAvgKmh.round()}',
+            style: style.displayLarge?.copyWith(fontSize: 120, fontWeight: FontWeight.w600)),
+        Text('km/s', style: style.titleMedium),
+        const Spacer(),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            _Stat('Anlık', '${t.currentKmh.round()}'),
+            _Stat('Mesafe', '${(t.recordingLengthM / 1000).toStringAsFixed(2)} km'),
+            _Stat('Süre', _fmtDur(t.recordingElapsed)),
+          ],
+        ),
         const SizedBox(height: 12),
         Text('Koridor bitiş tabelasını geçince "Bitiş" bas.',
             textAlign: TextAlign.center, style: style.bodyMedium?.copyWith(color: Colors.white70)),
@@ -181,6 +204,9 @@ class _RecordingView extends StatelessWidget {
     );
   }
 }
+
+String _fmtDur(Duration d) =>
+    '${d.inMinutes.toString().padLeft(2, '0')}:${(d.inSeconds % 60).toString().padLeft(2, '0')}';
 
 class _Controls extends StatelessWidget {
   final Tracker t;

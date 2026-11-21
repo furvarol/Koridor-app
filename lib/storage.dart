@@ -35,4 +35,19 @@ class Storage {
     final f = await _file('passages.json');
     await f.writeAsString(jsonEncode(ps.map((p) => p.toJson()).toList()));
   }
+
+  static Future<Map<String, dynamic>> loadSettings() async {
+    final f = await _file('settings.json');
+    if (!await f.exists()) return {};
+    try {
+      return jsonDecode(await f.readAsString()) as Map<String, dynamic>;
+    } catch (_) {
+      return {};
+    }
+  }
+
+  static Future<void> saveSettings(Map<String, dynamic> s) async {
+    final f = await _file('settings.json');
+    await f.writeAsString(jsonEncode(s));
+  }
 }

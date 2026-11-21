@@ -30,6 +30,7 @@ class Tracker extends ChangeNotifier {
   double? heading; // derece
   String status = 'Hazır';
   bool running = false;
+  bool voiceOn = true; // sesli uyarılar açık mı
 
   // Aktif koridor durumu
   Corridor? active;
@@ -42,6 +43,8 @@ class Tracker extends ChangeNotifier {
   // Kayıt modu durumu
   Position? _recStart;
   double? _recBearing;
+  DateTime? _recStartedAt;
+  double _recLenM = 0;
   final List<List<double>> _recTrack = [];
 
   // --- Türetilmiş değerler ---
@@ -76,6 +79,8 @@ class Tracker extends ChangeNotifier {
   Future<void> init() async {
     corridors = await Storage.loadCorridors();
     passages = await Storage.loadPassages();
+    final settings = await Storage.loadSettings();
+    voiceOn = settings['voiceOn'] as bool? ?? true;
     await _tts.setLanguage('tr-TR');
     await _tts.setSpeechRate(0.5);
     notifyListeners();
@@ -151,6 +156,8 @@ class Tracker extends ChangeNotifier {
         break;
       case TrackerMode.recording:
         if (usable && lastPos != null) {
+          final prev = _recTrack.last;
+          _recLenM += Geolocator.distanceBetween(prev[0], prev[1], p.latitude, p.longitude);
           _recTrack.add([p.latitude, p.longitude]);
         }
         break;
@@ -270,6 +277,8 @@ class Tracker extends ChangeNotifier {
     mode = TrackerMode.recording;
     _recStart = lastPos;
     _recBearing = heading;
+    _recStartedAt = lastPos!.timestamp;
+    _recLenM = 0;
     _recTrack
       ..clear()
       ..add([lastPos!.latitude, lastPos!.longitude]);
@@ -299,12 +308,15 @@ class Tracker extends ChangeNotifier {
       lengthM: len,
       track: List.of(_recTrack),
     );
-    corridors.add(c);
+    // Çift yön: aynı yolun ters yönü için de koridor oluştur.
+    final r = reverseOf(c, id: '${c.id}r');
+    corridors.addAll([c, r]);
     Storage.saveCorridors(corridors);
     _lastFinished[c.id] = DateTime.now();
+    _lastFinished[r.id] = DateTime.now();
     mode = TrackerMode.idle;
-    status = 'Koridor kaydedildi: ${(len / 1000).toStringAsFixed(1)} km';
-    _speak('Koridor kaydedildi.');
+    status = 'Koridor iki yönlü kaydedildi: ${(len / 1000).toStringAsFixed(1)} km';
+    _speak('Koridor iki yönlü kaydedildi.');
     notifyListeners();
     return c;
   }
@@ -317,13 +329,85 @@ class Tracker extends ChangeNotifier {
     }
   }
 
-  double get recordingLengthM {
-    double len = 0;
-    for (var i = 1; i < _recTrack.length; i++) {
-      len += Geolocator.distanceBetween(
-          _recTrack[i - 1][0], _recTrack[i - 1][1], _recTrack[i][0], _recTrack[i][1]);
+  double get recordingLengthM => _recLenM;
+
+  Duration get recordingElapsed => _recStartedAt == null
+      ? Duration.zero
+      : DateTime.now().difference(_recStartedAt!);
+
+  /// Kayıt başladığından beri ortalama hız.
+  double get recordingAvgKmh {
+    final s = recordingElapsed.inMilliseconds / 1000.0;
+    return s < 1 ? 0 : _recLenM / s * 3.6;
+  }
+
+  // ---------------- Ters yön ----------------
+
+  /// Bir koridorun ters yönü: çıkış noktası giriş olur, iz ters çevrilir.
+  Corridor reverseOf(Corridor c, {String? id}) {
+    final track = c.track.reversed.map((p) => List<double>.of(p)).toList();
+    return Corridor(
+      id: id ?? '${DateTime.now().millisecondsSinceEpoch}r',
+      name: reverseName(c.name),
+      startLat: c.endLat,
+      startLng: c.endLng,
+      startBearing: _startBearingOf(track, c.endLat, c.endLng, (c.startBearing + 180) % 360),
+      endLat: c.startLat,
+      endLng: c.startLng,
+      limitKmh: c.limitKmh,
+      lengthM: c.lengthM,
+      track: track,
+    );
+  }
+
+  /// Var olan bir koridora ters yönünü ekler.
+  Future<Corridor> addReverse(Corridor c) async {
+    final r = reverseOf(c);
+    corridors.add(r);
+    await Storage.saveCorridors(corridors);
+    notifyListeners();
+    return r;
+  }
+
+  /// İzin başından ~60 m ilerideki noktaya göre giriş yönü; iz yoksa yedek değer.
+  static double _startBearingOf(
+      List<List<double>> track, double lat, double lng, double fallback) {
+    double acc = 0;
+    for (var i = 1; i < track.length; i++) {
+      acc += Geolocator.distanceBetween(
+          track[i - 1][0], track[i - 1][1], track[i][0], track[i][1]);
+      if (acc >= 60) {
+        return Geolocator.bearingBetween(lat, lng, track[i][0], track[i][1]) % 360;
+      }
     }
-    return len;
+    if (track.length > 1 && acc > 10) {
+      return Geolocator.bearingBetween(lat, lng, track.last[0], track.last[1]) % 360;
+    }
+    return fallback;
+  }
+
+  /// "Siirt–Kurtalan" -> "Kurtalan–Siirt"; ayraç yoksa "(dönüş)" eklenir.
+  static String reverseName(String name) {
+    for (final sep in ['–', '—', '-']) {
+      final parts = name.split(sep);
+      if (parts.length == 2 && parts[0].trim().isNotEmpty && parts[1].trim().isNotEmpty) {
+        return '${parts[1].trim()}$sep${parts[0].trim()}';
+      }
+    }
+    return '$name (dönüş)';
+  }
+
+  // ---------------- Ses ----------------
+
+  Future<void> setVoice(bool on) async {
+    voiceOn = on;
+    if (!on) {
+      try {
+        await _tts.stop();
+      } catch (_) {}
+    }
+    notifyListeners();
+    await Storage.saveSettings({'voiceOn': on});
   }
 
   // ---------------- Koridor yönetimi ----------------
@@ -346,6 +430,7 @@ class Tracker extends ChangeNotifier {
   }
 
   Future<void> _speak(String text) async {
+    if (!voiceOn) return;
     try {
       await _tts.speak(text);
     } catch (_) {}

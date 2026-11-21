@@ -33,9 +33,9 @@ class PipView extends StatelessWidget {
             value = '${t.avgKmh.round()}';
             sub = 'anlık ${t.currentKmh.round()}';
           case TrackerMode.recording:
-            label = 'KAYIT';
-            value = '${t.currentKmh.round()}';
-            sub = '${(t.recordingLengthM / 1000).toStringAsFixed(1)} km';
+            label = 'KAYIT • ORT';
+            value = '${t.recordingAvgKmh.round()}';
+            sub = 'anlık ${t.currentKmh.round()} • ${(t.recordingLengthM / 1000).toStringAsFixed(1)} km';
           default:
             label = 'km/s';
             value = '${t.currentKmh.round()}';

@@ -39,9 +39,17 @@ class CorridorsScreen extends StatelessWidget {
                 onSelected: (v) async {
                   if (v == 'edit') await _edit(context, c);
                   if (v == 'delete') await _delete(context, c);
+                  if (v == 'reverse') {
+                    final r = await tracker.addReverse(c);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Ters yön eklendi: ${r.name}')));
+                    }
+                  }
                 },
                 itemBuilder: (_) => const [
                   PopupMenuItem(value: 'edit', child: Text('Düzenle')),
+                  PopupMenuItem(value: 'reverse', child: Text('Ters yönünü ekle')),
                   PopupMenuItem(value: 'delete', child: Text('Sil')),
                 ],
               ),
