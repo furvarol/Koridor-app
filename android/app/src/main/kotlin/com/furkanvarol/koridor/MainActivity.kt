@@ -30,6 +30,32 @@ class MainActivity : FlutterActivity() {
                 }
             }
         }
+        val live = LiveNotifier(this)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "koridor/live").setMethodCallHandler { call, result ->
+            when (call.method) {
+                "update" -> {
+                    live.update(
+                        call.argument<String>("title") ?: "",
+                        call.argument<String>("text") ?: "",
+                        call.argument<String>("chip") ?: "",
+                        (call.argument<Number>("color") ?: 0xFF4CAF50).toInt(),
+                        call.argument<Int>("progress") ?: 0,
+                    )
+                    result.success(null)
+                }
+                "clear" -> {
+                    live.clear()
+                    result.success(null)
+                }
+                "requestPermission" -> {
+                    live.requestPermission()
+                    result.success(null)
+                }
+                "canPromote" -> result.success(live.canPromote())
+                "openSettings" -> result.success(live.openSettings())
+                else -> result.notImplemented()
+            }
+        }
     }
 
     private fun isPipSupported(): Boolean =

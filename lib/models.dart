@@ -13,6 +13,18 @@ class Corridor {
   double lengthM; // yol boyunca ölçülen uzunluk
   List<List<double>> track; // kayıt sırasındaki iz [lat, lng]
 
+  // Resmi (bakanlık) koridorların sahada doğrulanması: sürücünün işaretlediği
+  // giriş/çıkış tabelası konumları ile resmi giriş/çıkış arasındaki farklar.
+  String? verify; // 'ok' (doğrulandı) | 'fail' (doğrulanmadı) | null (bakılmadı)
+  double? verifyStartM;
+  double? verifyEndM;
+  double? verifyLenM; // sürücünün kaydettiği uzunluk
+  String? verifiedAt;
+  List<double>? signStart; // [lat, lng]
+  List<double>? signEnd;
+
+  bool get isOfficial => id.startsWith('icisleri-');
+
   Corridor({
     required this.id,
     required this.name,
@@ -24,6 +36,13 @@ class Corridor {
     required this.limitKmh,
     required this.lengthM,
     this.track = const [],
+    this.verify,
+    this.verifyStartM,
+    this.verifyEndM,
+    this.verifyLenM,
+    this.verifiedAt,
+    this.signStart,
+    this.signEnd,
   });
 
   Map<String, dynamic> toJson() => {
@@ -37,6 +56,13 @@ class Corridor {
         'limitKmh': limitKmh,
         'lengthM': lengthM,
         'track': track,
+        if (verify != null) 'verify': verify,
+        if (verifyStartM != null) 'verifyStartM': verifyStartM,
+        if (verifyEndM != null) 'verifyEndM': verifyEndM,
+        if (verifyLenM != null) 'verifyLenM': verifyLenM,
+        if (verifiedAt != null) 'verifiedAt': verifiedAt,
+        if (signStart != null) 'signStart': signStart,
+        if (signEnd != null) 'signEnd': signEnd,
       };
 
   factory Corridor.fromJson(Map<String, dynamic> j) => Corridor(
@@ -53,7 +79,17 @@ class Corridor {
             .map<List<double>>(
                 (p) => [(p[0] as num).toDouble(), (p[1] as num).toDouble()])
             .toList(),
+        verify: j['verify'] as String?,
+        verifyStartM: (j['verifyStartM'] as num?)?.toDouble(),
+        verifyEndM: (j['verifyEndM'] as num?)?.toDouble(),
+        verifyLenM: (j['verifyLenM'] as num?)?.toDouble(),
+        verifiedAt: j['verifiedAt'] as String?,
+        signStart: _pt(j['signStart']),
+        signEnd: _pt(j['signEnd']),
       );
+
+  static List<double>? _pt(Object? v) =>
+      v is List && v.length == 2 ? [(v[0] as num).toDouble(), (v[1] as num).toDouble()] : null;
 }
 
 /// Tamamlanmış bir koridor geçişi.

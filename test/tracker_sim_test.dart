@@ -117,4 +117,36 @@ void main() {
     expect(done, contains('icisleri-1260'));
     expect(done, contains('icisleri-1234'));
   });
+
+  // Elle kayıt: giriş tabelasında başlat, çıkış tabelasında "Bitiş".
+  VerifyMatch? recordAlong(List<List<double>> track) {
+    final tr = Tracker();
+    tr.corridors = data.values.toList();
+    final ps = drive([track], DateTime.now());
+    tr.feed(ps.first);
+    expect(tr.beginRecording(), isNull);
+    for (final p in ps.skip(1)) {
+      tr.feed(p);
+    }
+    tr.markRecordingEnd();
+    return tr.findOfficialMatch();
+  }
+
+  test('Doğrulama: tabelalar resmi noktalarla örtüşüyor (1720)', () {
+    final m = recordAlong(trackFrom('icisleri-1720'));
+    expect(m, isNotNull);
+    expect(m!.corridor.id, 'icisleri-1720'); // ters yön 1718 değil
+    expect(m.ok, isTrue);
+    // ignore: avoid_print
+    print('1720: giriş ${m.startDiffM.round()} m, çıkış ${m.endDiffM.round()} m');
+  });
+
+  test('Doğrulama: resmi giriş kaymış (1233)', () {
+    final m = recordAlong(trackFrom('icisleri-1233', skipM: 1000));
+    expect(m, isNotNull);
+    expect(m!.corridor.id, 'icisleri-1233');
+    expect(m.ok, isFalse);
+    // ignore: avoid_print
+    print('1233: giriş ${m.startDiffM.round()} m, çıkış ${m.endDiffM.round()} m');
+  });
 }

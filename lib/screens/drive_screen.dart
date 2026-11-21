@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
+import '../live.dart';
 import '../main.dart';
 import '../pip.dart';
 import '../tracker.dart';
@@ -130,6 +131,7 @@ class _CorridorView extends StatelessWidget {
           Text('ORTALAMA', style: style.labelMedium),
           Text('${t.avgKmh.round()}',
               style: style.displayLarge?.copyWith(fontSize: 120, color: color, fontWeight: FontWeight.w600)),
+          if (over || near) _MaxBanner(allowed: allowed, over: over),
           const Spacer(),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -163,6 +165,41 @@ class _CorridorView extends StatelessWidget {
 
   String _fmt(Duration d) =>
       '${d.inMinutes.toString().padLeft(2, '0')}:${(d.inSeconds % 60).toString().padLeft(2, '0')}';
+}
+
+/// Limit aşıldığında (ya da yaklaşıldığında) koridorun sonuna kadar
+/// ortalamayı limite indirmek için gidilebilecek en yüksek hız.
+class _MaxBanner extends StatelessWidget {
+  final double allowed;
+  final bool over;
+  const _MaxBanner({required this.allowed, required this.over});
+
+  @override
+  Widget build(BuildContext context) {
+    final style = Theme.of(context).textTheme;
+    final impossible = allowed <= 0;
+    final c = over ? Colors.redAccent : Colors.orangeAccent;
+    return Container(
+      margin: const EdgeInsets.only(top: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: c.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: c),
+      ),
+      child: Column(
+        children: [
+          Text(impossible ? 'LİMİT ALTINA İNİLEMEZ' : 'SONA KADAR EN FAZLA',
+              style: style.labelMedium?.copyWith(color: c)),
+          Text(
+            impossible ? 'Mümkün olduğunca yavaşla' : Live.allowedText(allowed),
+            style: (impossible ? style.titleMedium : style.headlineMedium)
+                ?.copyWith(color: c, fontWeight: FontWeight.w700),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _Stat extends StatelessWidget {
@@ -240,6 +277,14 @@ class _Controls extends StatelessWidget {
                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
                 } else {
                   WakelockPlus.enable();
+                  // Canlı bildirim (durum çubuğu çipi) için izinler.
+                  await Live.requestPermission();
+                  if (await Live.canPromote() == false && context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: const Text('Durum çubuğunda hız için "Canlı güncellemeler" iznini aç.'),
+                      action: SnackBarAction(label: 'Ayarlar', onPressed: Live.openSettings),
+                    ));
+                  }
                 }
               }
             },
@@ -274,6 +319,22 @@ class _Controls extends StatelessWidget {
   }
 
   Future<void> _finishRecording(BuildContext context) async {
+    // Çıkış tabelası konumu bu an; diyalog açıkken iz uzamaz.
+    tracker.markRecordingEnd();
+    final m = tracker.findOfficialMatch();
+    if (m != null) {
+      final choice = await showDialog<String>(
+        context: context,
+        builder: (ctx) => _VerifyDialog(m),
+      );
+      if (choice == null) {
+        tracker.resumeRecording();
+        return;
+      }
+      await tracker.applyVerification(m, finish: choice == 'only');
+      if (choice == 'only' || !context.mounted) return;
+    }
+    if (!context.mounted) return;
     final nameCtrl = TextEditingController();
     final limitCtrl = TextEditingController(text: '110');
     final ok = await showDialog<bool>(
@@ -307,10 +368,57 @@ class _Controls extends StatelessWidget {
         ],
       ),
     );
+    if (ok == null) {
+      tracker.resumeRecording(); // diyalog kapatıldı, kayıt sürüyor
+      return;
+    }
     if (ok == true) {
       final limit = int.tryParse(limitCtrl.text) ?? 110;
       final name = nameCtrl.text.trim().isEmpty ? 'Koridor ${tracker.corridors.length + 1}' : nameCtrl.text.trim();
       tracker.endRecording(name, limit);
     }
+  }
+}
+
+/// Elle işaretlenen giriş/çıkış tabelalarını resmi koridorla karşılaştırır.
+class _VerifyDialog extends StatelessWidget {
+  final VerifyMatch m;
+  const _VerifyDialog(this.m);
+
+  @override
+  Widget build(BuildContext context) {
+    final c = m.corridor;
+    final style = Theme.of(context).textTheme;
+    final color = m.ok ? Colors.greenAccent : Colors.orangeAccent;
+    String d(double v) => v < 1000 ? '${v.round()} m' : '${(v / 1000).toStringAsFixed(1)} km';
+    return AlertDialog(
+      title: const Text('Resmi koridorla karşılaştır'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(c.name, style: style.titleMedium),
+          const SizedBox(height: 8),
+          Text('Giriş tabelası farkı: ${d(m.startDiffM)}'),
+          Text('Çıkış tabelası farkı: ${d(m.endDiffM)}'),
+          Text('Uzunluk: senin ${(m.recordedLenM / 1000).toStringAsFixed(1)} km, '
+              'bakanlık ${(c.lengthM / 1000).toStringAsFixed(1)} km'),
+          const SizedBox(height: 12),
+          Text(
+            m.ok
+                ? 'DOĞRULANDI (iki fark da ${Tracker.verifyToleranceM.round()} m içinde)'
+                : 'DOĞRULANMADI (fark ${Tracker.verifyToleranceM.round()} m\'den fazla)',
+            style: style.titleSmall?.copyWith(color: color, fontWeight: FontWeight.w700),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Vazgeç')),
+        TextButton(
+            onPressed: () => Navigator.pop(context, 'both'),
+            child: const Text('İşaretle + elle kaydı sakla')),
+        FilledButton(onPressed: () => Navigator.pop(context, 'only'), child: const Text('İşaretle')),
+      ],
+    );
   }
 }

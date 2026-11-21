@@ -52,8 +52,14 @@ class CorridorsScreen extends StatelessWidget {
             return ListTile(
               leading: const Icon(Icons.alt_route),
               title: Text(c.name),
-              subtitle: Text(
-                  '${(c.lengthM / 1000).toStringAsFixed(1)} km • limit ${c.limitKmh} km/s • yön ${c.startBearing.round()}°'),
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                      '${(c.lengthM / 1000).toStringAsFixed(1)} km • limit ${c.limitKmh} km/s • yön ${c.startBearing.round()}°'),
+                  if (c.isOfficial) _VerifyBadge(c),
+                ],
+              ),
               trailing: PopupMenuButton<String>(
                 onSelected: (v) async {
                   if (v == 'edit') await _edit(context, c);
@@ -182,6 +188,41 @@ class CorridorMapScreen extends StatelessWidget {
             Marker(point: start, child: const Icon(Icons.play_circle, color: Colors.green, size: 36)),
             Marker(point: end, child: const Icon(Icons.flag_circle, color: Colors.red, size: 36)),
           ]),
+        ],
+      ),
+    );
+  }
+}
+
+/// Resmi koridorun sahada doğrulanma durumu.
+class _VerifyBadge extends StatelessWidget {
+  final Corridor c;
+  const _VerifyBadge(this.c);
+
+  @override
+  Widget build(BuildContext context) {
+    String d(double? v) =>
+        v == null ? '?' : (v < 1000 ? '${v.round()} m' : '${(v / 1000).toStringAsFixed(1)} km');
+    final (IconData icon, Color color, String text) = switch (c.verify) {
+      'ok' => (Icons.verified, Colors.greenAccent, 'Bakanlık verisi doğrulandı'),
+      'fail' => (
+          Icons.error_outline,
+          Colors.orangeAccent,
+          'Doğrulanmadı: giriş ${d(c.verifyStartM)}, çıkış ${d(c.verifyEndM)} fark'
+        ),
+      _ => (Icons.help_outline, Colors.grey, 'Bakanlık verisi, doğrulanmamış'),
+    };
+    return Padding(
+      padding: const EdgeInsets.only(top: 2),
+      child: Row(
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 4),
+          Flexible(
+            child: Text(text,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: color),
+                overflow: TextOverflow.ellipsis),
+          ),
         ],
       ),
     );

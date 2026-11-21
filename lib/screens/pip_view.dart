@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../live.dart';
 import '../main.dart';
 import '../tracker.dart';
 
@@ -31,7 +32,9 @@ class PipView extends StatelessWidget {
                     : Colors.greenAccent;
             label = 'ORT • ${c.limitKmh}';
             value = '${t.avgKmh.round()}';
-            sub = 'anlık ${t.currentKmh.round()}';
+            sub = over || near
+                ? 'en fazla ${Live.allowedText(t.allowedKmh)}'
+                : 'anlık ${t.currentKmh.round()}';
           case TrackerMode.recording:
             label = 'KAYIT • ORT';
             value = '${t.recordingAvgKmh.round()}';

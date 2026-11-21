@@ -3,6 +3,7 @@ import 'package:intl/date_symbol_data_local.dart';
 
 import 'screens/corridors_screen.dart';
 import 'screens/drive_screen.dart';
+import 'live.dart';
 import 'pip.dart';
 import 'screens/history_screen.dart';
 import 'screens/pip_view.dart';
@@ -16,7 +17,10 @@ Future<void> main() async {
   await tracker.init();
   Pip.init();
   // Takip açıkken uygulamadan çıkınca hız PiP penceresinde görünsün.
-  tracker.addListener(() => Pip.setAutoEnter(tracker.running));
+  tracker.addListener(() {
+    Pip.setAutoEnter(tracker.running);
+    Live.sync(tracker); // durum çubuğu / canlı bildirim
+  });
   runApp(const KoridorApp());
 }
 

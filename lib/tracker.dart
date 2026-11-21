@@ -57,6 +57,7 @@ class Tracker extends ChangeNotifier {
   Position? _recStart;
   double? _recBearing;
   DateTime? _recStartedAt;
+  Position? _recEnd; // "Bitiş"e basıldığı an (çıkış tabelası)
   double _recLenM = 0;
   final List<List<double>> _recTrack = [];
 
@@ -181,7 +182,7 @@ class Tracker extends ChangeNotifier {
       }
       _checkEntry(p, confirmedNow);
       _announce(confirmedNow);
-      if (_recording && lastPos != null) {
+      if (_recording && _recEnd == null && lastPos != null) {
         final prev = _recTrack.last;
         _recLenM += Geolocator.distanceBetween(prev[0], prev[1], p.latitude, p.longitude);
         _recTrack.add([p.latitude, p.longitude]);
@@ -355,9 +356,70 @@ class Tracker extends ChangeNotifier {
     return null;
   }
 
+  /// "Bitiş"e basıldı: çıkış tabelasının konumunu sabitler, izi dondurur.
+  void markRecordingEnd() {
+    if (_recording && lastPos != null) _recEnd ??= lastPos;
+    notifyListeners();
+  }
+
+  /// "Bitiş" diyaloğundan vazgeçildi: kayıt sürer.
+  void resumeRecording() {
+    _recEnd = null;
+    notifyListeners();
+  }
+
+  // ---------------- Resmi koridor doğrulama ----------------
+
+  static const double verifyToleranceM = 200; // tabela ile resmi nokta arası
+  static const double verifyMatchMaxM = 2000; // eşleşme için en fazla uzaklık
+
+  /// Kaydedilen giriş/çıkış tabelalarına en uygun resmi koridoru bulur.
+  VerifyMatch? findOfficialMatch() {
+    final s = _recStart;
+    final e = _recEnd ?? lastPos;
+    if (!_recording || s == null || e == null) return null;
+    final recBearing =
+        Geolocator.bearingBetween(s.latitude, s.longitude, e.latitude, e.longitude) % 360;
+    VerifyMatch? best;
+    for (final c in corridors.where((c) => c.isOfficial)) {
+      final dS = Geolocator.distanceBetween(s.latitude, s.longitude, c.startLat, c.startLng);
+      final dE = Geolocator.distanceBetween(e.latitude, e.longitude, c.endLat, c.endLng);
+      if (dS > verifyMatchMaxM || dE > verifyMatchMaxM) continue;
+      final cb = Geolocator.bearingBetween(c.startLat, c.startLng, c.endLat, c.endLng) % 360;
+      if (bearingDiff(recBearing, cb) > 45) continue;
+      if (best == null || dS + dE < best.startDiffM + best.endDiffM) {
+        best = VerifyMatch(c, dS, dE, recordingLengthM, [s.latitude, s.longitude],
+            [e.latitude, e.longitude]);
+      }
+    }
+    return best;
+  }
+
+  /// Doğrulama sonucunu resmi koridora işler. [finish] ise kaydı da bitirir
+  /// (elle kayıt ayrı koridor olarak saklanmaz).
+  Future<void> applyVerification(VerifyMatch m, {bool finish = false}) async {
+    final c = m.corridor;
+    c.verify = m.ok ? 'ok' : 'fail';
+    c.verifyStartM = m.startDiffM;
+    c.verifyEndM = m.endDiffM;
+    c.verifyLenM = m.recordedLenM;
+    c.verifiedAt = DateTime.now().toIso8601String();
+    c.signStart = m.signStart;
+    c.signEnd = m.signEnd;
+    await Storage.saveCorridors(corridors);
+    if (finish) {
+      _recording = false;
+      _recEnd = null;
+      status = '${c.name}: ${m.ok ? 'doğrulandı' : 'doğrulanmadı'}';
+      _speak(m.ok ? 'Resmi koridor doğrulandı.' : 'Resmi koridor doğrulanmadı.');
+    }
+    notifyListeners();
+  }
+
   /// Kaydı bitirir ve koridoru döndürür (isim/limit sonra ekranda sorulur).
   Corridor? endRecording(String name, int limitKmh) {
     if (!_recording || _recStart == null || lastPos == null) return null;
+    final end = _recEnd ?? lastPos!;
     double len = 0;
     for (var i = 1; i < _recTrack.length; i++) {
       len += Geolocator.distanceBetween(
@@ -369,8 +431,8 @@ class Tracker extends ChangeNotifier {
       startLat: _recStart!.latitude,
       startLng: _recStart!.longitude,
       startBearing: _recBearing!,
-      endLat: lastPos!.latitude,
-      endLng: lastPos!.longitude,
+      endLat: end.latitude,
+      endLng: end.longitude,
       limitKmh: limitKmh,
       lengthM: len,
       track: List.of(_recTrack),
@@ -382,6 +444,7 @@ class Tracker extends ChangeNotifier {
     _lastFinished[c.id] = DateTime.now();
     _lastFinished[r.id] = DateTime.now();
     _recording = false;
+    _recEnd = null;
     status = 'Koridor iki yönlü kaydedildi: ${(len / 1000).toStringAsFixed(1)} km';
     _speak('Koridor iki yönlü kaydedildi.');
     notifyListeners();
@@ -391,6 +454,7 @@ class Tracker extends ChangeNotifier {
   void cancelRecording() {
     if (_recording) {
       _recording = false;
+      _recEnd = null;
       status = 'Kayıt iptal edildi';
       notifyListeners();
     }
@@ -516,6 +580,18 @@ class Tracker extends ChangeNotifier {
       await _tts.speak(text);
     } catch (_) {}
   }
+}
+
+/// Elle kaydedilen tabelaların bir resmi koridorla karşılaştırması.
+class VerifyMatch {
+  final Corridor corridor;
+  final double startDiffM, endDiffM, recordedLenM;
+  final List<double> signStart, signEnd;
+  VerifyMatch(this.corridor, this.startDiffM, this.endDiffM, this.recordedLenM, this.signStart,
+      this.signEnd);
+
+  bool get ok =>
+      startDiffM <= Tracker.verifyToleranceM && endDiffM <= Tracker.verifyToleranceM;
 }
 
 /// Süren bir koridor geçişi.
