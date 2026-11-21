@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
@@ -15,21 +18,37 @@ class CorridorsScreen extends StatelessWidget {
       animation: tracker,
       builder: (context, _) {
         final cs = tracker.corridors;
+        final importBtn = Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+          child: OutlinedButton.icon(
+            onPressed: () => _importOfficial(context),
+            icon: const Icon(Icons.download),
+            label: const Text('Ankara–İzmir resmi koridorlarını yükle'),
+          ),
+        );
         if (cs.isEmpty) {
-          return const Center(
-            child: Padding(
-              padding: EdgeInsets.all(24),
-              child: Text(
-                'Henüz koridor yok.\n\nSürüş ekranında takibi başlat; koridor giriş tabelasında "Koridor başlangıcı", çıkış tabelasında "Bitiş" bas.',
-                textAlign: TextAlign.center,
+          return Column(
+            children: [
+              importBtn,
+              const Expanded(
+                child: Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Text(
+                      'Henüz koridor yok.\n\nSürüş ekranında takibi başlat; koridor giriş tabelasında "Koridor başlangıcı", çıkış tabelasında "Bitiş" bas.',
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
               ),
-            ),
+            ],
           );
         }
         return ListView.builder(
-          itemCount: cs.length,
+          itemCount: cs.length + 1,
           itemBuilder: (context, i) {
-            final c = cs[i];
+            if (i == 0) return importBtn;
+            final c = cs[i - 1];
             return ListTile(
               leading: const Icon(Icons.alt_route),
               title: Text(c.name),
@@ -62,6 +81,26 @@ class CorridorsScreen extends StatelessWidget {
         );
       },
     );
+  }
+
+  /// APK'ya gömülü İçişleri Bakanlığı verisini (koridor-verisi/) ekler.
+  Future<void> _importOfficial(BuildContext context) async {
+    String msg;
+    try {
+      final raw = await rootBundle.loadString('koridor-verisi/ankara-izmir.json');
+      final list = (jsonDecode(raw) as List)
+          .map((e) => Corridor.fromJson(e as Map<String, dynamic>))
+          .toList();
+      final n = await tracker.importCorridors(list);
+      msg = n == 0
+          ? 'Resmi koridorlar zaten yüklü (${list.length} koridor).'
+          : '$n resmi koridor eklendi (iki yön).';
+    } catch (e) {
+      msg = 'Yüklenemedi: $e';
+    }
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    }
   }
 
   Future<void> _edit(BuildContext context, Corridor c) async {

@@ -103,7 +103,9 @@ class _CorridorView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = t.active!;
+    final run = t.primary!;
+    final c = run.corridor;
+    final others = t.others;
     final style = Theme.of(context).textTheme;
     final over = t.avgKmh > c.limitKmh;
     final near = !over && t.avgKmh > c.limitKmh - 3;
@@ -141,9 +143,19 @@ class _CorridorView extends StatelessWidget {
           LinearProgressIndicator(value: t.progress, minHeight: 8, color: color),
           const SizedBox(height: 8),
           Text(
-            '${_fmt(t.elapsed)}  •  ${(t.distanceM / 1000).toStringAsFixed(1)} / ${(c.lengthM / 1000).toStringAsFixed(1)} km',
+            '${_fmt(t.elapsed)}  •  ${(t.distanceM / 1000).toStringAsFixed(1)} / ${(run.lengthM / 1000).toStringAsFixed(1)} km',
             style: style.bodySmall,
           ),
+          for (final o in others)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                '+ ${o.corridor.name}: ort. ${o.avgKmh(DateTime.now()).round()}, kalan ${(o.remainingM / 1000).toStringAsFixed(1)} km',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: style.bodySmall?.copyWith(color: Colors.white70),
+              ),
+            ),
         ],
       ),
     );
@@ -244,7 +256,7 @@ class _Controls extends StatelessWidget {
                 label: const Text('Bitiş'),
               ),
             _ => OutlinedButton.icon(
-                onPressed: t.running && t.mode == TrackerMode.idle
+                onPressed: t.running
                     ? () {
                         final err = t.beginRecording();
                         if (err != null) {

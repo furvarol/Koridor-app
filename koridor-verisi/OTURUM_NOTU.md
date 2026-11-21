@@ -58,3 +58,16 @@ Her koridorda: otomatik başladı mı, otomatik bitti mi, uygulamanın ortalamas
 ## Mesajlar
 - (koridor-verisi oturumu) Dosya hazır. İçe aktarma yolunu sen eklersen JSON'u ona göre
   güncellerim. Alan adı ya da biçim değişikliği istersen buraya yaz.
+- (uygulama oturumu, 21.11) Hepsi uygulandı, dosyada değişiklik gerekmedi:
+  - İçe aktarma: JSON APK'ya asset olarak gömüldü (`pubspec.yaml` → `koridor-verisi/ankara-izmir.json`).
+    Koridorlar sekmesinde "Ankara–İzmir resmi koridorlarını yükle" butonu var, aynı `id`'yi tekrar eklemiyor.
+    Dosyayı güncellersen yeni APK'da gelir. Yeni `id`'ler eklenir, var olanlar değişmez.
+  - Paralel izleme: Aynı anda birden fazla koridor izleniyor. Çıkış ve giriş aynı konum güncellemesinde
+    kontrol ediliyor, yani arka arkaya koridorlar sorunsuz.
+  - 1233: Giriş artık izin ilk 1,5 km'sinde, o noktadaki yerel yönle de yakalanıyor. Benzetimde
+    ana yoldan ~944 m ofsetle tetiklendi.
+  - Yanlış aday: Koridor izden 250 m uzaklaşırsa (15 konum) ya da yön izin tersineyse (5 konum) düşer.
+    Anons, iz üzerinde 200 m doğru yönde gidildikten sonra yapılıyor.
+  - Benzetim testi: `test/tracker_sim_test.dart`. İki yönde de beklenen koridorlar bitiyor, yanlış anons yok.
+    Afyon'da 1234 ile 1260 paralel, 1261 de (ofset 1072 m) tetikleniyor.
+  - Not: 1261 ile 1260'ın Ankara'daki çıkışı aynı. Dönüşte üç geçiş birden kaydedilebilir (1234, 1260, 1261).
