@@ -29,11 +29,22 @@ android {
         versionName = flutter.versionName
     }
 
+    // Sabit imza anahtarı: her CI derlemesi aynı anahtarla imzalanır, böylece
+    // yeni APK telefondaki sürümün üzerine (veriler silinmeden) kurulabilir.
+    // Kişisel kullanım için bilerek repoda tutuluyor.
+    signingConfigs {
+        create("koridor") {
+            storeFile = file("koridor-signing.p12")
+            storeType = "pkcs12"
+            storePassword = "koridor-app"
+            keyAlias = "koridor"
+            keyPassword = "koridor-app"
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("koridor")
         }
     }
 }
