@@ -4,12 +4,22 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      ref:
+        description: "Derlenecek commit/dal (boşsa main). Eski sürümleri Release olarak yeniden yayınlamak için."
+        required: false
+        default: ""
+
+permissions:
+  contents: write # Release oluşturmak için
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
 
       - uses: actions/setup-java@v4
         with:
@@ -30,7 +40,28 @@ jobs:
       - run: flutter pub get
       - run: flutter build apk --release
 
+      - name: Sürüm bilgisi
+        id: info
+        run: |
+          sha=$(git rev-parse --short HEAD)
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "full=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "tag=build-${{ github.run_number }}-$sha" >> "$GITHUB_OUTPUT"
+          echo "date=$(git log -1 --format=%cd --date=format:'%Y-%m-%d')" >> "$GITHUB_OUTPUT"
+          git log -1 --format=%B | grep -v -e '^Co-Authored-By:' -e '^Claude-Session:' > notes.md
+          cp build/app/outputs/flutter-apk/app-release.apk "koridor-$sha.apk"
+
       - uses: actions/upload-artifact@v4
         with:
           name: koridor-apk
           path: build/app/outputs/flutter-apk/app-release.apk
+
+      # APK'yı kalıcı olarak saklar (Actions artifact'ları 90 gün sonra silinir).
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.info.outputs.tag }}
+          target_commitish: ${{ steps.info.outputs.full }}
+          name: Koridor ${{ steps.info.outputs.date }} (${{ steps.info.outputs.sha }})
+          body_path: notes.md
+          files: koridor-${{ steps.info.outputs.sha }}.apk
+          make_latest: ${{ github.event_name == 'push' }}
